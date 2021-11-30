@@ -1,4 +1,4 @@
-# My Safe App
+# Gnosis Safe App for Polygon POS Bridge
 
 ## Getting Started
 
