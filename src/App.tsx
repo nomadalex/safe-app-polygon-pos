@@ -1,56 +1,96 @@
-import React, { useCallback } from 'react'
-import styled from 'styled-components'
-import { Button, Title } from '@gnosis.pm/safe-react-components'
-import { useSafeAppsSDK } from '@gnosis.pm/safe-apps-react-sdk'
+import React, { useState } from 'react'
+import { Button, Card, Divider, Select, Text, TextFieldInput, Title } from '@gnosis.pm/safe-react-components'
+import { FormButtonWrapper, FormHeaderWrapper, Heading, Label, RightJustified, Wrapper } from './GeneralStyled'
+import { ethers, constants } from 'ethers';
+import { SelectItem } from '@gnosis.pm/safe-react-components/dist/inputs/Select'
+import { InputAdornment } from '@material-ui/core';
 
-const Container = styled.div`
-  padding: 1rem;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-`
+import ethIcon from './assets/eth.png';
 
-const Link = styled.a`
-  margin-top: 8px;
-`
+const tokens : SelectItem[] = [
+    {
+        id: "1",
+        label: "ETH",
+        iconUrl: ethIcon,
+    }
+];
 
 const SafeApp = (): React.ReactElement => {
-  const { sdk, safe } = useSafeAppsSDK()
+  const [amount, setAmount] = useState('');
+  const [selectItems] = useState<SelectItem[]>(tokens);
+  const [activeItemId, setActiveItemId] = useState("1");
+  const [tokenSymbol] = useState('ETH');
+  const [maxBalance] = useState(constants.Zero);
+  const [decimals] = useState('18');
+  const formattedMaxBalance = ethers.utils.formatUnits(maxBalance, decimals);
 
-  const submitTx = useCallback(async () => {
-    try {
-      const { safeTxHash } = await sdk.txs.send({
-        txs: [
-          {
-            to: safe.safeAddress,
-            value: '0',
-            data: '0x',
-          },
-        ],
-      })
-      console.log({ safeTxHash })
-      const safeTx = await sdk.txs.getBySafeTxHash(safeTxHash)
-      console.log({ safeTx })
-    } catch (e) {
-      console.error(e)
-    }
-  }, [safe, sdk])
+  const onSelect = (id: string) => {
+    setActiveItemId(id);
+  };
+
+  const onClick = () => {
+      return;
+  };
 
   return (
-    <Container>
-      <Title size="md">Safe: {safe.safeAddress}</Title>
+    <Wrapper>
+        <Card>
+            <FormHeaderWrapper>
+                <Title size="md">Deposit</Title>
+            </FormHeaderWrapper>
+            
+            <Divider />
 
-      <Button size="lg" color="primary" onClick={submitTx}>
-        Click to send a test transaction
-      </Button>
+            <Label size="lg">Choose the target address you want to deposit to</Label>
+            <TextFieldInput
+                name={'target'}
+                label={"Target"}
+                value={""}
+                onChange={(e) => setAmount(e.target.value)}         
+            />
 
-      <Link href="https://github.com/gnosis/safe-apps-sdk" target="_blank" rel="noreferrer">
-        Documentation
-      </Link>
-    </Container>
+            <Divider />
+    
+            <Label size="lg">Select the token to deposit</Label>
+            <Select
+                items={selectItems}
+                activeItemId={activeItemId}
+                onItemClick={onSelect}
+            />
+
+            <Divider />
+
+            <Label size="lg">Choose the amount you want to deposit</Label>
+            <TextFieldInput
+                  name={'amount'}
+                  label={"Amount"}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  InputProps={{
+                      endAdornment: (
+                          <InputAdornment position="end">
+                              <Button color="secondary" size="md" onClick={() => setAmount(formattedMaxBalance)}>
+                                  <Heading>MAX</Heading>
+                              </Button>
+                          </InputAdornment>
+                      ),
+                  }}          
+            />
+            <RightJustified>
+                <Text size="lg">
+                    Maximum {formattedMaxBalance} {tokenSymbol}
+                </Text>
+            </RightJustified>
+
+            <Divider />
+
+            <FormButtonWrapper>
+                <Button color="primary" size="lg" variant="contained" onClick={onClick}>
+                    Deposit {tokenSymbol}
+                </Button>
+            </FormButtonWrapper>
+        </Card>
+    </Wrapper>
   )
 }
 
