@@ -1,43 +1,69 @@
 import { ethers } from "ethers";
-import { BaseTransaction } from "@gnosis.pm/safe-apps-sdk";
+import { BaseTransaction, TokenBalance } from "@gnosis.pm/safe-apps-sdk";
 
 import erc20Abi from "./abi/IERC20.json";
 import rootChainManagerAbi from "./abi/pos/RootChainManager.json";
 
 const mainnet = {
     "RootChainManagerAddress": "0xA0c68C638235ee32657e8f720a23ceC1bFc77C77",
-    "ERC20Predicate": "0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf",
 };
 
 const rinkeby = {
-    "RootChainManagerAddress": "0xb19D68085FF3078e1f9911cc2509c4aFB6d40be1",
-    "ERC20Predicate": "0xd53E0518e2af7988f928d6D3996665656f966965",
+    "RootChainManagerAddress": "0xc6E587652347d7843b576E4b418AAb1BD2334aBc",
 };
 
 export interface ContractsHelper {
+    initTokens(list: TokenBalance[]) : Promise<TokenBalance[]>;
     createDepositEthTransactions(user: string, amount: string) : Promise<BaseTransaction[]>;
     createDepositErc20Transactions(tokenAddress: string, user: string, amount: string) : Promise<BaseTransaction[]>;
 }
 
 class ContractsHelperImpl implements ContractsHelper {
-    _erc20PredicateAddress;
+    _rootChainManagerContract;
     _erc20Interface;
-    _rootChainManagerAddress;
-    _rootChainManagerInterface;
+    _tokenCache = new Map<string, string>();
+    _predicateCache = new Map<string, string>();
 
-    constructor(erc20PredicateAddress: string, rootChainManagerAddress: string) {
-        this._erc20PredicateAddress = erc20PredicateAddress;
+    constructor(rootChainManagerAddress: string, provider: ethers.providers.Provider) {
+        this._rootChainManagerContract = new ethers.Contract(rootChainManagerAddress, rootChainManagerAbi, provider);
         this._erc20Interface = new ethers.utils.Interface(erc20Abi);
-        this._rootChainManagerAddress = rootChainManagerAddress;
-        this._rootChainManagerInterface = new ethers.utils.Interface(rootChainManagerAbi);
+    }
+
+    getPredicateForToken(token: string) : string | undefined {
+        const type = this._tokenCache.get(token);
+        if (!type) return;
+        return this._predicateCache.get(type);
+    }
+
+    async setupTypePredicate(type: string) {
+        if (!this._predicateCache.has(type)) {
+            const predicate = await this._rootChainManagerContract.typeToPredicate(type);
+            this._predicateCache.set(type, predicate);
+        }
+    }
+
+    async initTokens(list: TokenBalance[]) : Promise<TokenBalance[]> {
+        const m = await Promise.all(list.map(async t => {
+            if (t.tokenInfo.type === 'NATIVE_TOKEN') return t;
+            if (t.tokenInfo.type === 'ERC20') {
+                const type = await this._rootChainManagerContract.tokenToType(t.tokenInfo.address);
+                if (type === ethers.constants.HashZero) return null;
+                this._tokenCache.set(t.tokenInfo.address, type);
+                await this.setupTypePredicate(type);
+                return t;
+            }
+            return null;
+        }));
+
+        return m.filter(v => v) as TokenBalance[];
     }
 
     async createDepositEthTransactions(user: string, amount: string): Promise<BaseTransaction[]> {
         const txs = [
             {
-              to: this._rootChainManagerAddress,
+              to: this._rootChainManagerContract.address,
               value: amount,
-              data: this._rootChainManagerInterface.encodeFunctionData('depositEtherFor', [
+              data: this._rootChainManagerContract.interface.encodeFunctionData('depositEtherFor', [
                 user
               ]),
             },
@@ -46,20 +72,23 @@ class ContractsHelperImpl implements ContractsHelper {
     }
 
     async createDepositErc20Transactions(tokenAddress: string, user: string, amount: string): Promise<BaseTransaction[]> {
+        const predicate = this.getPredicateForToken(tokenAddress);
+        if (!predicate) return [];
+
         const depositData = ethers.utils.defaultAbiCoder.encode(['uint256'], [amount]);
         const txs = [
             {
               to: tokenAddress,
               value: '0',
               data: this._erc20Interface.encodeFunctionData('approve', [
-                this._erc20PredicateAddress,
+                predicate,
                 amount,
               ]),
             },
             {
-              to: this._rootChainManagerAddress,
+              to: this._rootChainManagerContract.address,
               value: '0',
-              data: this._rootChainManagerInterface.encodeFunctionData('depositFor', [
+              data: this._rootChainManagerContract.interface.encodeFunctionData('depositFor', [
                 user,
                 tokenAddress,
                 depositData
@@ -80,12 +109,8 @@ function getConfig(chainId: number) {
     return null;
 }
 
-export function initContractsHelper(chainId: number) : ContractsHelper | null {
+export function initContractsHelper(chainId: number, provider: ethers.providers.Provider) : ContractsHelper | null {
     const m = getConfig(chainId);
     if (!m) return null;
-    return new ContractsHelperImpl(m["ERC20Predicate"], m["RootChainManagerAddress"]);
-}
-
-export function initTokenContract(tokenAddress: string, provider: ethers.providers.Provider) : ethers.Contract {
-    return new ethers.Contract(tokenAddress, erc20Abi, provider);
+    return new ContractsHelperImpl(m["RootChainManagerAddress"], provider);
 }

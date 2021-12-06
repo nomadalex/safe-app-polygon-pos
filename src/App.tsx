@@ -6,7 +6,7 @@ import { SelectItem } from '@gnosis.pm/safe-react-components/dist/inputs/Select'
 import { InputAdornment } from '@material-ui/core';
 
 import { useSafeAppsSDK } from '@gnosis.pm/safe-apps-react-sdk';
-//import { SafeAppProvider } from '@gnosis.pm/safe-apps-provider';
+import { SafeAppProvider } from '@gnosis.pm/safe-apps-provider';
 import { initContractsHelper } from './contracts';
 
 import SafeAppsSDK from '@gnosis.pm/safe-apps-sdk';
@@ -45,14 +45,16 @@ const SafeApp = (): React.ReactElement => {
 
   const formattedMaxBalance = ethers.utils.formatUnits(maxBalance, decimals);
 
-  //const provider = useMemo(() => new ethers.providers.Web3Provider(new SafeAppProvider(safe, sdk)), [sdk, safe]);
-  const contractsHelper = useMemo(() => initContractsHelper(safe.chainId), [safe]);
+  const provider = useMemo(() => new ethers.providers.Web3Provider(new SafeAppProvider(safe, sdk)), [sdk, safe]);
+  const contractsHelper = useMemo(() => initContractsHelper(safe.chainId, provider), [safe, provider]);
 
   useEffect(() => {
     getBalances(sdk).then(list => {
-        setTokenList(list);
+        return contractsHelper?.initTokens(list);
+    }).then(list => {
+        setTokenList(list || []);
     });
-  }, [sdk, safe]);
+  }, [sdk, safe, contractsHelper]);
 
   useEffect(() => {
     const info = getTokenInfo(activeItemId, tokenList);
