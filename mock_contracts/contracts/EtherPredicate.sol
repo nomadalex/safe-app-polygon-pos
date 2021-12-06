@@ -3,6 +3,8 @@ pragma solidity 0.6.6;
 import {ITokenPredicate} from "./ITokenPredicate.sol";
 
 contract EtherPredicate is ITokenPredicate {
+    bytes32 public constant TOKEN_TYPE = keccak256("Ether");
+
     event LockedEther(
         address indexed depositor,
         address indexed depositReceiver,

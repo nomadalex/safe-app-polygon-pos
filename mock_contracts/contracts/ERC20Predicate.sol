@@ -5,6 +5,8 @@ import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/release-v3.4
 import "./ITokenPredicate.sol";
 
 contract ERC20Predicate is ITokenPredicate {
+    bytes32 public constant TOKEN_TYPE = keccak256("ERC20");
+
     using SafeERC20 for IERC20;
 
     event LockedERC20(

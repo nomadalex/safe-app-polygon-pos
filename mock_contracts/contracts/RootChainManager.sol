@@ -2,15 +2,10 @@ pragma solidity 0.6.6;
 
 import "./ContextMixin.sol";
 import "./ITokenPredicate.sol";
+import "./RootChainManagerStorage.sol";
 
-contract RootChainManager is ContextMixin {
-    address public predicateAddress;
-    address public ethPredicateAddress;
-
-    function setPredicateAddress(address addr, address eth) external {
-        predicateAddress = addr;
-        ethPredicateAddress = eth;
-    }
+contract RootChainManager is ContextMixin, RootChainManagerStorage {
+    address public constant ETHER_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     function _msgSender()
         internal
@@ -18,6 +13,67 @@ contract RootChainManager is ContextMixin {
         returns (address payable sender)
     {
         return ContextMixin.msgSender();
+    }
+
+    /**
+     * @notice Register a token predicate address against its type, callable only by ADMIN
+     * @dev A predicate is a contract responsible to process the token specific logic while locking or exiting tokens
+     * @param tokenType bytes32 unique identifier for the token type
+     * @param predicateAddress address of token predicate address
+     */
+    function registerPredicate(bytes32 tokenType, address predicateAddress)
+        external
+    {
+        typeToPredicate[tokenType] = predicateAddress;
+    }
+
+    /**
+     * @notice Map a token to enable its movement via the PoS Portal, callable only by mappers
+     * @param rootToken address of token on root chain
+     * @param childToken address of token on child chain
+     * @param tokenType bytes32 unique identifier for the token type
+     */
+    function mapToken(
+        address rootToken,
+        address childToken,
+        bytes32 tokenType
+    ) external {
+        // explicit check if token is already mapped to avoid accidental remaps
+        require(
+            rootToChildToken[rootToken] == address(0) &&
+            childToRootToken[childToken] == address(0),
+            "RootChainManager: ALREADY_MAPPED"
+        );
+        _mapToken(rootToken, childToken, tokenType);
+    }
+
+    /**
+     * @notice Clean polluted token mapping
+     * @param rootToken address of token on root chain. Since rename token was introduced later stage, 
+     * clean method is used to clean pollulated mapping
+     */
+    function cleanMapToken(
+        address rootToken,
+        address childToken
+    ) external {
+        rootToChildToken[rootToken] = address(0);
+        childToRootToken[childToken] = address(0);
+        tokenToType[rootToken] = bytes32(0);
+    }
+
+    function _mapToken(
+        address rootToken,
+        address childToken,
+        bytes32 tokenType
+    ) private {
+        require(
+            typeToPredicate[tokenType] != address(0x0),
+            "RootChainManager: TOKEN_TYPE_NOT_SUPPORTED"
+        );
+
+        rootToChildToken[rootToken] = childToken;
+        childToRootToken[childToken] = rootToken;
+        tokenToType[rootToken] = tokenType;
     }
 
     /**
@@ -47,16 +103,11 @@ contract RootChainManager is ContextMixin {
 
     function _depositEtherFor(address user) private {
         bytes memory depositData = abi.encode(msg.value);
-        ITokenPredicate(ethPredicateAddress).lockTokens(
-            _msgSender(),
-            user,
-            address(0),
-            depositData
-        );
+        _depositFor(user, ETHER_ADDRESS, depositData);
 
         // payable(typeToPredicate[tokenToType[ETHER_ADDRESS]]).transfer(msg.value);
         // transfer doesn't work as expected when receiving contract is proxified so using call
-        (bool success, /* bytes memory data */) = ethPredicateAddress.call{value: msg.value}("");
+        (bool success, /* bytes memory data */) = typeToPredicate[tokenToType[ETHER_ADDRESS]].call{value: msg.value}("");
         if (!success) {
             revert("RootChainManager: ETHER_TRANSFER_FAILED");
         }
@@ -67,6 +118,22 @@ contract RootChainManager is ContextMixin {
         address rootToken,
         bytes memory depositData
     ) private {
+        bytes32 tokenType = tokenToType[rootToken];
+        require(
+            rootToChildToken[rootToken] != address(0x0) &&
+               tokenType != 0,
+            "RootChainManager: TOKEN_NOT_MAPPED"
+        );
+        address predicateAddress = typeToPredicate[tokenType];
+        require(
+            predicateAddress != address(0),
+            "RootChainManager: INVALID_TOKEN_TYPE"
+        );
+        require(
+            user != address(0),
+            "RootChainManager: INVALID_USER"
+        );
+
         ITokenPredicate(predicateAddress).lockTokens(
             _msgSender(),
             user,
