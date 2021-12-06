@@ -6,22 +6,28 @@ import { SelectItem } from '@gnosis.pm/safe-react-components/dist/inputs/Select'
 import { InputAdornment } from '@material-ui/core';
 
 import { useSafeAppsSDK } from '@gnosis.pm/safe-apps-react-sdk';
-import { SafeAppProvider } from '@gnosis.pm/safe-apps-provider';
-import { initContractsHelper, initTokenContract } from './contracts';
+//import { SafeAppProvider } from '@gnosis.pm/safe-apps-provider';
+import { initContractsHelper } from './contracts';
 
-import { getTokenList, TokenInfo } from './tokens';
+import SafeAppsSDK from '@gnosis.pm/safe-apps-sdk';
+import { TokenBalance } from '@gnosis.pm/safe-apps-sdk';
 
-function buildTokenItems(list: TokenInfo[]) : SelectItem[] {
+async function getBalances(sdk: SafeAppsSDK) : Promise<TokenBalance[]> {
+    const balances = await sdk.safe.experimental_getBalances({ currency: "USD" });
+    return balances.items;
+}
+
+function buildTokenItems(list: TokenBalance[]) : SelectItem[] {
     return list.map((v, idx) => {
         return {
             id: (idx+1).toString(),
-            label: v.symbol,
-            iconUrl: v.iconUrl,
+            label: v.tokenInfo.symbol,
+            iconUrl: v.tokenInfo.logoUri || undefined,
         };
     })
 }
 
-function getTokenInfo(activeItemId: string, tokenList: TokenInfo[]) : TokenInfo {
+function getTokenInfo(activeItemId: string, tokenList: TokenBalance[]) : TokenBalance {
     const idx = parseInt(activeItemId)-1;
     return tokenList[idx];
 }
@@ -29,51 +35,52 @@ function getTokenInfo(activeItemId: string, tokenList: TokenInfo[]) : TokenInfo 
 const SafeApp = (): React.ReactElement => {
   const { sdk, safe } = useSafeAppsSDK();
 
-  const tokenList = useMemo(() => getTokenList(safe.chainId), [safe]);
-
+  const initialTokenList : TokenBalance[] = [];
+  const [tokenList, setTokenList] = useState(initialTokenList);
   const [targetAddress, setTargetAddress] = useState('');
   const [amount, setAmount] = useState('');
-  const [selectItems] = useState<SelectItem[]>(buildTokenItems(tokenList));
   const [activeItemId, setActiveItemId] = useState("1");
   const [tokenSymbol, setTokenSymbol] = useState("");
   const [maxBalance, setMaxBalance] = useState(constants.Zero);
   const [decimals, setDecimals] = useState('18');
 
-  const provider = useMemo(() => new ethers.providers.Web3Provider(new SafeAppProvider(safe, sdk)), [sdk, safe]);
+  const formattedMaxBalance = ethers.utils.formatUnits(maxBalance, decimals);
 
+  //const provider = useMemo(() => new ethers.providers.Web3Provider(new SafeAppProvider(safe, sdk)), [sdk, safe]);
   const contractsHelper = useMemo(() => initContractsHelper(safe.chainId), [safe]);
 
   useEffect(() => {
+    getBalances(sdk).then(list => {
+        setTokenList(list);
+    });
+  }, [sdk, safe]);
+
+  useEffect(() => {
     const info = getTokenInfo(activeItemId, tokenList);
-    setTokenSymbol(info.symbol);
-    setDecimals(info.decimals);
-    setMaxBalance(constants.Zero);
-    if (activeItemId === "1") {
-        provider.getBalance(safe.safeAddress).then(v => {
-            setMaxBalance(v);
-        });
-    } else {
-        const contract = initTokenContract(info.address, provider);
-        contract.balanceOf(safe.safeAddress).then((v: BigNumber) => {
-            setMaxBalance(v);
-        })
-    }
-  }, [activeItemId, safe, provider, tokenList]);
+    if (!info) return;
 
-  const formattedMaxBalance = ethers.utils.formatUnits(maxBalance, decimals);
-
-  const onSelect = (id: string) => {
-    setActiveItemId(id);
-  };
+    setTokenSymbol(info.tokenInfo.symbol);
+    setDecimals(info.tokenInfo.decimals.toString());
+    setMaxBalance(BigNumber.from(info.balance));
+  }, [activeItemId, tokenList]);
 
   const onClick = () => {
-      const newAmount = ethers.utils.parseUnits(amount ? amount : '0', decimals).toString();
+      const token = getTokenInfo(activeItemId, tokenList);
+      if (!token) return;
+
+      const newAmount = ethers.utils.parseUnits(amount ? amount : '0', decimals);
+      if (newAmount.isZero()) return;
+
       let txsPromise = null;
-      if (activeItemId === "1") {
-        txsPromise = contractsHelper?.createDepositEthTransactions(targetAddress, newAmount);
-      } else {
-          const tokenInfo = getTokenInfo(activeItemId, tokenList);
-          txsPromise = contractsHelper?.createDepositErc20Transactions(tokenInfo.address, targetAddress, newAmount);
+      switch (token.tokenInfo.type) {
+          case 'NATIVE_TOKEN':
+              txsPromise = contractsHelper?.createDepositEthTransactions(targetAddress, newAmount.toString());
+              break;
+          case 'ERC20':
+              txsPromise = contractsHelper?.createDepositErc20Transactions(token.tokenInfo.address, targetAddress, newAmount.toString());
+              break;
+          default:
+              break;
       }
 
       txsPromise?.then(txs => {
@@ -103,9 +110,10 @@ const SafeApp = (): React.ReactElement => {
     
             <Label size="lg">Select the token to deposit</Label>
             <Select
-                items={selectItems}
+                items={buildTokenItems(tokenList)}
                 activeItemId={activeItemId}
-                onItemClick={onSelect}
+                onItemClick={setActiveItemId}
+                fallbackImage={"https://gnosis-safe.io/app/static/media/token_placeholder.c1abe466.svg"}
             />
 
             <Divider />
