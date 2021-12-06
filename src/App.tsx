@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Divider, Select, Text, TextFieldInput, Title } from '@gnosis.pm/safe-react-components'
 import { FormButtonWrapper, FormHeaderWrapper, Heading, Label, RightJustified, Wrapper } from './GeneralStyled'
+import { Loader } from './loader';
 import { ethers, constants, BigNumber } from 'ethers';
 import { SelectItem } from '@gnosis.pm/safe-react-components/dist/inputs/Select'
 import { InputAdornment } from '@material-ui/core';
@@ -35,6 +36,8 @@ function getTokenInfo(activeItemId: string, tokenList: TokenBalance[]) : TokenBa
 const SafeApp = (): React.ReactElement => {
   const { sdk, safe } = useSafeAppsSDK();
 
+  const [isLoading, setIsLoading] = useState(true);
+
   const [tokenList, setTokenList] = useState([] as TokenBalance[]);
   const [targetAddress, setTargetAddress] = useState('');
   const [amount, setAmount] = useState('');
@@ -53,6 +56,7 @@ const SafeApp = (): React.ReactElement => {
         return contractsHelper?.initTokens(list);
     }).then(list => {
         setTokenList(list || []);
+        setIsLoading(false);
     });
   }, [sdk, safe, contractsHelper]);
 
@@ -89,6 +93,12 @@ const SafeApp = (): React.ReactElement => {
       });
       return;
   };
+
+  if (isLoading) {
+    return (
+        <Loader size={'md'} />
+      );
+  }
 
   return (
     <Wrapper>
