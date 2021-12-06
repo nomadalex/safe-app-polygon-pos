@@ -5,8 +5,8 @@ import erc20Abi from "./abi/IERC20.json";
 import rootChainManagerAbi from "./abi/pos/RootChainManager.json";
 
 const mainnet = {
-    "RootChainManagerAddress": "",
-    "ERC20Predicate": "",
+    "RootChainManagerAddress": "0xA0c68C638235ee32657e8f720a23ceC1bFc77C77",
+    "ERC20Predicate": "0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf",
 };
 
 const rinkeby = {
