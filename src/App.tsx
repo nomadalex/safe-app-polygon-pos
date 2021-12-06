@@ -35,8 +35,7 @@ function getTokenInfo(activeItemId: string, tokenList: TokenBalance[]) : TokenBa
 const SafeApp = (): React.ReactElement => {
   const { sdk, safe } = useSafeAppsSDK();
 
-  const initialTokenList : TokenBalance[] = [];
-  const [tokenList, setTokenList] = useState(initialTokenList);
+  const [tokenList, setTokenList] = useState([] as TokenBalance[]);
   const [targetAddress, setTargetAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [activeItemId, setActiveItemId] = useState("1");
