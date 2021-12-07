@@ -29,6 +29,11 @@ function getTokenInfo(activeItemId: string, tokenList: TokenBalance[]) : TokenBa
     return tokenList[idx];
 }
 
+function isValidAmount(amount: string, decimals: string) : boolean {
+    const newAmount = ethers.utils.parseUnits(amount ? amount : '0', decimals);
+    return !newAmount.isZero();
+}
+
 const SafeApp = (): React.ReactElement => {
   const { sdk, safe } = useSafeAppsSDK();
 
@@ -64,6 +69,10 @@ const SafeApp = (): React.ReactElement => {
     setDecimals(info.tokenInfo.decimals.toString());
     setMaxBalance(BigNumber.from(info.balance));
   }, [activeItemId, tokenList]);
+
+  const checkButtonDisabled = () : boolean => {
+    return !ethers.utils.isAddress(targetAddress) || !isValidAmount(amount, decimals);
+  };
 
   const onClick = () => {
       const token = getTokenInfo(activeItemId, tokenList);
@@ -110,6 +119,8 @@ const SafeApp = (): React.ReactElement => {
                 name={'target'}
                 label={"Target"}
                 value={targetAddress}
+                error={ (ethers.utils.isAddress(targetAddress) || !targetAddress) ? undefined : "Please input valid address"}
+                showErrorsInTheLabel={true}
                 onChange={(e) => setTargetAddress(e.target.value)}
             />
 
@@ -150,7 +161,7 @@ const SafeApp = (): React.ReactElement => {
             <Divider />
 
             <FormButtonWrapper>
-                <Button color="primary" size="lg" variant="contained" onClick={onClick}>
+                <Button color="primary" size="lg" variant="contained" onClick={onClick} disabled={checkButtonDisabled()}>
                     Deposit {tokenSymbol}
                 </Button>
             </FormButtonWrapper>
