@@ -10,13 +10,9 @@ import { useSafeAppsSDK } from '@gnosis.pm/safe-apps-react-sdk';
 import { SafeAppProvider } from '@gnosis.pm/safe-apps-provider';
 import { initContractsHelper } from './contracts';
 
-import SafeAppsSDK from '@gnosis.pm/safe-apps-sdk';
 import { TokenBalance } from '@gnosis.pm/safe-apps-sdk';
 
-async function getBalances(sdk: SafeAppsSDK) : Promise<TokenBalance[]> {
-    const balances = await sdk.safe.experimental_getBalances({ currency: "USD" });
-    return balances.items;
-}
+import { getBalances } from "./get_balances";
 
 function buildTokenItems(list: TokenBalance[]) : SelectItem[] {
     return list.map((v, idx) => {
