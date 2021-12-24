@@ -6,8 +6,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../lib/ExitPayloadReader.sol";
 import "../IAssetProxy.sol";
 import "./IRootChainManager.sol";
+import "../Initializable.sol";
 
-contract RootManager is Ownable {
+contract RootManager is Ownable, Initializable {
     using RLPReader for RLPReader.RLPItem;
     using ExitPayloadReader for bytes;
     using ExitPayloadReader for ExitPayloadReader.ExitPayload;
@@ -20,8 +21,7 @@ contract RootManager is Ownable {
 
     mapping (bytes32 => address) public operators;
 
-    function initialize(address _assetProxy, address _childManagerAddress, address _rootChainManager) external onlyOwner {
-        require(assetProxy == address(0), "ALREADY_INITIALIZED");
+    function initialize(address _assetProxy, address _childManagerAddress, address _rootChainManager) external initializer {
         assetProxy = _assetProxy;
         childManagerAddress = _childManagerAddress;
         rootChainManager = _rootChainManager;

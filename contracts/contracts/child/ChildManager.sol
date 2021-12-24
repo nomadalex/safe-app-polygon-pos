@@ -4,15 +4,15 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../IAssetProxy.sol";
+import "../Initializable.sol";
 
-contract ChildManager is Ownable {
+contract ChildManager is Ownable, Initializable {
     event WithdrawTo(address user);
 
     address public assetProxy;
     mapping (bytes32 => address) public operators;
 
-    function initialize(address _assetProxy) external onlyOwner {
-        require(assetProxy == address(0), "ALREADY_INITIALIZED");
+    function initialize(address _assetProxy) external initializer {
         assetProxy = _assetProxy;
     }
 
