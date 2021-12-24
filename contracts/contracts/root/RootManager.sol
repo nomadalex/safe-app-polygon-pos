@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../lib/ExitPayloadReader.sol";
 import "../IAssetProxy.sol";
+import "./IRootOperator.sol";
 import "./IRootChainManager.sol";
 import "../Initializable.sol";
 
@@ -47,10 +48,6 @@ contract RootManager is Ownable, Initializable {
         return operators[type_];
     }
 
-    function exitTokens(address _operator, address _token, address _user, bytes memory _log) private {
-        IAssetProxy(assetProxy).proxyCall(_operator, abi.encodeWithSignature("exitTokens(address,address,bytes)", _token, _user, _log));
-    }
-
     function exit(bytes calldata inputData, uint myLogIndex) external {
         ExitPayloadReader.ExitPayload memory payload = inputData.toExitPayload();
         ExitPayloadReader.Receipt memory receipt = payload.getReceipt();
@@ -64,9 +61,13 @@ contract RootManager is Ownable, Initializable {
         address operator = getOperator(rootToken);
         require(operator != address(0), "OPERATOR_NOT_FOUND");
 
+        IAssetProxy(assetProxy).setOperator(operator);
+
         IRootChainManager(rootChainManager).exit(inputData);
 
         address user = abi.decode(mylog.getData(), (address));
-        exitTokens(operator, rootToken, user, log.toRlpBytes());
+        IRootOperator(assetProxy).exitTokens(rootToken, user, log.toRlpBytes());
+
+        IAssetProxy(assetProxy).setOperator(address(0));
     }
 }
