@@ -4,16 +4,19 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../IAssetProxy.sol";
+import "./IChildChainManager.sol";
 import "../Initializable.sol";
 
 contract ChildManager is Ownable, Initializable {
     event WithdrawTo(address user);
 
     address public assetProxy;
+    address public childChainManager;
     mapping (bytes32 => address) public operators;
 
-    function initialize(address _assetProxy) external initializer {
+    function initialize(address _assetProxy, address _childChainManager) external initializer {
         assetProxy = _assetProxy;
+        childChainManager = _childChainManager;
     }
 
     function registerOperator(bytes32 _type, address _operator) external onlyOwner {
@@ -26,6 +29,9 @@ contract ChildManager is Ownable, Initializable {
     }
 
     function withdrawTo(bytes32 _type, address _token, address _user, bytes calldata _withdrawData) external {
+        address rootToken = IChildChainManager(childChainManager).childToRootToken(_token);
+        require(rootToken != address(0), "TOKEN_NOT_MAPPED");
+
         address op = operators[_type];
         require(op != address(0), "OPERATOR_NOT_FOUND");
         withdrawTokens(op, msg.sender, _token, _withdrawData);
