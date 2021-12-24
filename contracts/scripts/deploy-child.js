@@ -5,6 +5,8 @@ const utils = require("./utils");
 async function main() {
   const addresses = utils.getContractAddresses();
 
+  const network = await hre.ethers.provider.getNetwork();
+
   const [, proxyDeployer] = await hre.ethers.getSigners();
 
   const AssetProxy = await hre.ethers.getContractFactory("AssetProxy", proxyDeployer);
@@ -26,7 +28,7 @@ async function main() {
 
   await proxy.transferOwnership(childManager.address);
 
-  await childManager.initialize(proxy.address);
+  await childManager.initialize(proxy.address, utils.getChildChainManagerAddress(network.chainId));
   const tokenType = await erc20Operator.TOKEN_TYPE();
   await childManager.registerOperator(tokenType, erc20Operator.address);
 }
