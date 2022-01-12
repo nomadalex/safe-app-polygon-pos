@@ -1,31 +1,67 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { ethers } from "ethers";
 import { BaseTransaction, TokenBalance } from "@gnosis.pm/safe-apps-sdk";
 
 import erc20Abi from "./abi/IERC20.json";
 import rootChainManagerAbi from "./abi/pos/RootChainManager.json";
+import childChainManagerAbi from "./abi/pos/ChildChainManager.json";
+import rootManagerAbi from "./abi/RootManager.json";
+import childManagerAbi from "./abi/ChildManager.json";
 
-const mainnet = {
-    "RootChainManagerAddress": "0xA0c68C638235ee32657e8f720a23ceC1bFc77C77",
+type IConfig = {
+    root: {
+        RootChainManagerAddress: string,
+        RootManagerAddress: string,
+    },
+    child: {
+        ChildChainManagerAddress: string,
+        ChildManagerAddress: string,
+        AssetProxyAddress: string,
+    }
 };
 
-const rinkeby = {
-    "RootChainManagerAddress": "0xc6E587652347d7843b576E4b418AAb1BD2334aBc",
+const mainnet : IConfig = {
+    root: {
+        "RootChainManagerAddress": "0xA0c68C638235ee32657e8f720a23ceC1bFc77C77",
+        "RootManagerAddress": "",
+    },
+    child: {
+        "ChildChainManagerAddress": "",
+        "ChildManagerAddress": "",
+        "AssetProxyAddress": "",
+    }
+};
+
+const goerli : IConfig = {
+    root: {
+        "RootChainManagerAddress": "0xBbD7cBFA79faee899Eaf900F13C9065bF03B1A74",
+        "RootManagerAddress": "0x17e5204a12Af9fC8d909e143D5696f8d1c5522be",
+    },
+    child: {
+        "ChildChainManagerAddress": "0xb5505a6d998549090530911180f38aC5130101c6",
+        "ChildManagerAddress": "0x8b98dD77e07D000801F347631697Dc34d3b7358d",
+        "AssetProxyAddress": "0x4F6612b7ddA8cB47D73690f2e61330588eb01AC5",
+    }
 };
 
 export interface ContractsHelper {
     initTokens(list: TokenBalance[]) : Promise<TokenBalance[]>;
     createDepositEthTransactions(user: string, amount: string) : Promise<BaseTransaction[]>;
     createDepositErc20Transactions(tokenAddress: string, user: string, amount: string) : Promise<BaseTransaction[]>;
+    createWithdrawErc20Transactions(tokenAddress: string, user: string, amount: string) : Promise<BaseTransaction[]>;
+    createExitTransactions(inputData: string, myLogIndex: number) : Promise<BaseTransaction[]>;
 }
 
-class ContractsHelperImpl implements ContractsHelper {
+class RootContractsHelperImpl implements ContractsHelper {
     _rootChainManagerContract;
     _erc20Interface;
+    _rootManagerContract;
     _tokenCache = new Map<string, string>();
     _predicateCache = new Map<string, string>();
 
-    constructor(rootChainManagerAddress: string, provider: ethers.providers.Provider) {
-        this._rootChainManagerContract = new ethers.Contract(rootChainManagerAddress, rootChainManagerAbi, provider);
+    constructor(config: IConfig, provider: ethers.providers.Provider) {
+        this._rootChainManagerContract = new ethers.Contract(config.root.RootChainManagerAddress, rootChainManagerAbi, provider);
+        this._rootManagerContract = new ethers.Contract(config.root.RootManagerAddress, rootManagerAbi, provider);
         this._erc20Interface = new ethers.utils.Interface(erc20Abi);
     }
 
@@ -96,21 +132,102 @@ class ContractsHelperImpl implements ContractsHelper {
             },
           ];
         return txs;
-    }   
+    }
+
+    createWithdrawErc20Transactions(tokenAddress: string, user: string, amount: string): Promise<BaseTransaction[]> {
+        throw new Error("Method not implemented.");
+    }
+
+    createExitTransactions(inputData: string, myLogIndex: number): Promise<BaseTransaction[]> {
+        const txs = [
+            {
+              to: this._rootManagerContract.address,
+              value: '0',
+              data: this._rootManagerContract.interface.encodeFunctionData('exit', [
+                inputData,
+                myLogIndex
+              ]),
+            },
+          ];
+        return Promise.resolve(txs);
+    }
+
 }
 
-function getConfig(chainId: number) {
-    if (chainId === 1) {
-        return mainnet;
+class ChildContractsHelperImpl implements ContractsHelper {
+    _childChainManagerContract;
+    _childManagerContract;
+    _erc20Interface;
+    _assetProxyAddress;
+
+    constructor(config: IConfig, provider: ethers.providers.Provider) {
+        this._childChainManagerContract = new ethers.Contract(config.child.ChildManagerAddress, childChainManagerAbi, provider);
+        this._childManagerContract = new ethers.Contract(config.child.ChildManagerAddress, childManagerAbi, provider);
+        this._erc20Interface = new ethers.utils.Interface(erc20Abi);
+        this._assetProxyAddress = config.child.AssetProxyAddress;
     }
-    if (chainId === 4) {
-        return rinkeby;
+
+    async initTokens(list: TokenBalance[]): Promise<TokenBalance[]> {
+        const m = await Promise.all(list.map(async t => {
+            if (t.tokenInfo.type === 'NATIVE_TOKEN') return null;
+            if (t.tokenInfo.type === 'ERC20') {
+                const rootToken = await this._childChainManagerContract.childToRootToken(t.tokenInfo.address);
+                if (rootToken === ethers.constants.HashZero) return null;
+                return t;
+            }
+            return null;
+        }));
+
+        return m.filter(v => v) as TokenBalance[];
     }
-    return null;
+    createDepositEthTransactions(user: string, amount: string): Promise<BaseTransaction[]> {
+        throw new Error("Method not implemented.");
+    }
+    createDepositErc20Transactions(tokenAddress: string, user: string, amount: string): Promise<BaseTransaction[]> {
+        throw new Error("Method not implemented.");
+    }
+    async createWithdrawErc20Transactions(tokenAddress: string, user: string, amount: string): Promise<BaseTransaction[]> {
+        const type = "0x8ae85d849167ff996c04040c44924fd364217285e4cad818292c7ac37c0a345b"; // keccak256("ERC20")
+        const withdrawData = ethers.utils.defaultAbiCoder.encode(['uint256'], [amount]);
+        const txs = [
+            {
+              to: tokenAddress,
+              value: '0',
+              data: this._erc20Interface.encodeFunctionData('approve', [
+                this._assetProxyAddress,
+                amount,
+              ]),
+            },
+            {
+              to: this._childManagerContract.address,
+              value: '0',
+              data: this._childManagerContract.interface.encodeFunctionData('withdrawTo', [
+                type,
+                tokenAddress,
+                user,
+                withdrawData
+              ]),
+            },
+          ];
+        return txs;
+    }
+    createExitTransactions(inputData: string, myLogIndex: number): Promise<BaseTransaction[]> {
+        throw new Error("Method not implemented.");
+    }
 }
 
 export function initContractsHelper(chainId: number, provider: ethers.providers.Provider) : ContractsHelper | null {
-    const m = getConfig(chainId);
-    if (!m) return null;
-    return new ContractsHelperImpl(m["RootChainManagerAddress"], provider);
+    if (chainId === 1) { // eth mainnet
+        return new RootContractsHelperImpl(mainnet, provider);;
+    }
+    if (chainId === 5) { // eth goerli
+        return new RootContractsHelperImpl(goerli, provider);
+    }
+    if (chainId === 137) { // polygon mainnet
+        return new ChildContractsHelperImpl(mainnet, provider);
+    }
+    if (chainId === 80001) { // polygon testnet
+        return new ChildContractsHelperImpl(goerli, provider);
+    }
+    return null;
 }
