@@ -8,6 +8,8 @@
     "@gnosis.pm/safe-apps-sdk": "^6.1.1",
     "@gnosis.pm/safe-react-components": "^0.9.1",
     "@material-ui/core": "^4.11.0",
+    "@maticnetwork/maticjs": "^3.1.0",
+    "@maticnetwork/maticjs-ethers": "^1.0.0",
     "ethers": "^5.5.2",
     "react": "^17.0.1",
     "react-dom": "^17.0.1",
